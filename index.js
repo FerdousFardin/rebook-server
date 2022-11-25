@@ -12,8 +12,10 @@ function verifyJWT(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(400).send({ message: "Bad request." });
   const token = authHeader.split(" ")[1];
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (decoded, error) {
-    if (error) return res.status(403).send({ message: "Forbidden." });
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (error, decoded) {
+    if (error) {
+      return res.status(403).send({ message: "Forbidden." });
+    }
     req.decoded = decoded;
     next();
   });
@@ -32,6 +34,7 @@ async function run() {
     const categoriesCollection = rebookDB.collection("categories");
     const productsCollection = rebookDB.collection("products");
     const usersCollection = rebookDB.collection("users");
+    const bookingsCollection = rebookDB.collection("bookings");
     //end collections
     app.post("/products", verifyJWT, async (req, res) => {
       const result = await productsCollection.insertOne(req.body);
@@ -42,7 +45,7 @@ async function run() {
 
       res.send(categories);
     });
-    app.get("/products", async (req, res) => {
+    app.get("/products", verifyJWT, async (req, res) => {
       const { categoryId } = req.query;
       let query = {};
       if (categoryId) query = { categoryId };
@@ -59,15 +62,27 @@ async function run() {
     });
     app.post("/jwt", async (req, res) => {
       const email = req.body;
-      const token = jwt.sign;
-      // const query = { email };
-      console.log(email);
-      const user = await usersCollection.findOne(query);
+      // console.log(email);
+      const user = await usersCollection.findOne(email);
       if (user) {
-        email, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1d" };
-        res.send({ token });
+        const token = jwt.sign(email, process.env.ACCESS_TOKEN_SECRET, {
+          expiresIn: "1d",
+        });
+        return res.send({ token });
       }
       res.status(403).send({ accessToken: "" });
+    });
+    app.get("/bookings", async (req, res) => {
+      const bookings = await bookingsCollection.find({}).toArray();
+      res.send(bookings);
+    });
+    app.post("/bookings", verifyJWT, async (req, res) => {
+      const { email } = req.decoded;
+      const bookingInfo = req.body;
+      if (bookingInfo.customerEmail !== email)
+        return res.status(401).send({ message: "Unauthorized access." });
+      const result = await bookingsCollection.insertOne(bookingInfo);
+      res.send(result);
     });
   } finally {
   }
