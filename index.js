@@ -65,8 +65,6 @@ async function run() {
     });
     app.post("/users", async (req, res) => {
       const userInfo = req.body;
-      // if (userInfo.email !== email)
-      // return res.status(401).send({ message: "Unauthorized access." });
       const result = await usersCollection.insertOne(userInfo);
       res.send(result);
     });
@@ -77,7 +75,6 @@ async function run() {
     });
     app.post("/jwt", async (req, res) => {
       const email = req.body;
-      // console.log(email);
       const user = await usersCollection.findOne(email);
       if (user) {
         const token = jwt.sign(email, process.env.ACCESS_TOKEN_SECRET, {
@@ -110,6 +107,19 @@ async function run() {
       const result = await productsCollection.insertOne(productInfo);
       res.send(result);
     });
+    app.get(
+      "/my-products",
+      verifyJWT,
+      hasRoles(["seller"]),
+      async (req, res) => {
+        const { email } = req.decoded;
+        const seller = await usersCollection.findOne({ email });
+        const sellerProducts = await productsCollection
+          .find({ seller: seller.name })
+          .toArray();
+        res.send(sellerProducts);
+      }
+    );
   } finally {
   }
 }
