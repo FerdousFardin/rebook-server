@@ -120,6 +120,32 @@ async function run() {
         res.send(sellerProducts);
       }
     );
+    app.put(
+      "/my-products",
+      verifyJWT,
+      hasRoles(["seller"]),
+      async (req, res) => {
+        const query = req.query;
+        const productId = req.body._id;
+        let filter = {};
+        let updatedDoc = {};
+        if (query.advertised === "true") {
+          filter = { _id: ObjectId(productId) };
+          updatedDoc = {
+            $set: {
+              advertised: true,
+            },
+          };
+        }
+        const optiion = { upsert: true };
+        const result = await productsCollection.updateOne(
+          filter,
+          updatedDoc,
+          optiion
+        );
+        res.send(result);
+      }
+    );
   } finally {
   }
 }
