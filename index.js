@@ -36,10 +36,21 @@ async function run() {
     const usersCollection = rebookDB.collection("users");
     const bookingsCollection = rebookDB.collection("bookings");
     //end collections
-    app.post("/products", verifyJWT, async (req, res) => {
-      const result = await productsCollection.insertOne(req.body);
-      res.send(result);
-    });
+
+    //verify roles
+    function hasRoles(roles) {
+      return async function (req, res, next) {
+        const { email } = req.decoded;
+        const user = await usersCollection.findOne({ email });
+        const verifyRole = roles.map((role) => {
+          if (user?.role.includes(role)) return true;
+          else return false;
+        });
+        return verifyRole.every((e) => e === true)
+          ? next()
+          : res.status(401).send({ message: "Unauthorized access" });
+      };
+    }
     app.get("/categories", async (req, res) => {
       const categories = await categoriesCollection.find({}).toArray();
 
@@ -53,12 +64,16 @@ async function run() {
       res.send(products);
     });
     app.post("/users", async (req, res) => {
-      // const { email } = req.decoded;
       const userInfo = req.body;
       // if (userInfo.email !== email)
       // return res.status(401).send({ message: "Unauthorized access." });
       const result = await usersCollection.insertOne(userInfo);
       res.send(result);
+    });
+    app.get("/user", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded;
+      const user = await usersCollection.findOne({ email: decodedEmail.email });
+      res.send(user);
     });
     app.post("/jwt", async (req, res) => {
       const email = req.body;
@@ -76,6 +91,12 @@ async function run() {
       const bookings = await bookingsCollection.find({}).toArray();
       res.send(bookings);
     });
+    app.get("/my-orders", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded;
+      const query = { customerEmail: decodedEmail.email };
+      const myOrders = await bookingsCollection.find(query).toArray();
+      res.send(myOrders);
+    });
     app.post("/bookings", verifyJWT, async (req, res) => {
       const { email } = req.decoded;
       const bookingInfo = req.body;
@@ -84,13 +105,27 @@ async function run() {
       const result = await bookingsCollection.insertOne(bookingInfo);
       res.send(result);
     });
+    app.post("/products", verifyJWT, hasRoles(["seller"]), async (req, res) => {
+      const productInfo = req.body;
+      const result = await productsCollection.insertOne(productInfo);
+      res.send(result);
+    });
   } finally {
   }
 }
-run().catch((er) => console.error());
+run().catch((er) => console.error(er));
 app.get("/", (req, res) => {
   res.send("Server is running");
 });
 app.listen(port, () => {
   console.log(`server is working on port ${port}`);
 });
+//test
+// const token = jwt.sign(
+//   { email: "test@email.com" },
+//   process.env.ACCESS_TOKEN_SECRET,
+//   {
+//     expiresIn: "1d",
+//   }
+// );
+// console.log(token);
