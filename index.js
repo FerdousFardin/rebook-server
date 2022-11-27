@@ -109,6 +109,20 @@ async function run() {
       const result = await productsCollection.insertOne(productInfo);
       res.send(result);
     });
+    app.put("/products", verifyJWT, async (req, res) => {
+      const { id } = req.body;
+      const query = req.query;
+      const filter = { _id: ObjectId(id) };
+      let updatedDoc = {};
+      if (query.reported) updatedDoc = { $set: { isReported: true } };
+      const options = { upsert: true };
+      const result = await productsCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
     app.get(
       "/my-products",
       verifyJWT,
@@ -164,6 +178,20 @@ async function run() {
       const { id } = req.body;
       const user = await usersCollection.deleteOne({ _id: ObjectId(id) });
       res.send(user);
+    });
+    app.put("/users", verifyJWT, hasRoles(["admin"]), async (req, res) => {
+      const query = req.query;
+      const { id } = req.body;
+      const filter = { _id: ObjectId(id) };
+      let updatedDoc = {};
+      if (query.verify) updatedDoc = { $set: { isVerified: true } };
+      const options = { upsert: true };
+      const result = await usersCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
     });
   } finally {
   }
