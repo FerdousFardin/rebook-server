@@ -65,6 +65,8 @@ async function run() {
     });
     app.post("/users", async (req, res) => {
       const userInfo = req.body;
+      const userExist = await usersCollection.findOne(userInfo);
+      if (userExist) return res.send({ acknowledged: true });
       const result = await usersCollection.insertOne(userInfo);
       res.send(result);
     });
@@ -146,6 +148,23 @@ async function run() {
         res.send(result);
       }
     );
+    app.get(
+      "/all-sellers",
+      verifyJWT,
+      hasRoles(["admin"]),
+      async (req, res) => {
+        const query = {
+          role: "seller",
+        };
+        const allSellers = await usersCollection.find(query).toArray();
+        res.send(allSellers);
+      }
+    );
+    app.delete("/users", verifyJWT, hasRoles(["admin"]), async (req, res) => {
+      const { id } = req.body;
+      const user = await usersCollection.deleteOne({ _id: ObjectId(id) });
+      res.send(user);
+    });
   } finally {
   }
 }
