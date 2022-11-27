@@ -3,6 +3,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 app.use(cors());
@@ -51,16 +52,30 @@ async function run() {
           : res.status(401).send({ message: "Unauthorized access" });
       };
     }
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
+      const { id } = req.body;
+      console.log(id);
+      const item = await bookingsCollection.findOne({ _id: ObjectId(id) });
+      const amount = item.resalePrice * 100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount,
+        currency: "usd",
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
     app.get("/categories", async (req, res) => {
       const categories = await categoriesCollection.find({}).toArray();
 
       res.send(categories);
     });
     app.get("/products", verifyJWT, async (req, res) => {
-      const { categoryId } = req.query;
-      let query = {};
-      if (categoryId) query = { categoryId };
-      const products = await productsCollection.find(query).toArray();
+      const query = req.query;
+      let filter = {};
+      if (query.categoryId) filter = { categoryId: query.categoryId };
+      if (query.id) filter = { _id: ObjectId(query.id) };
+      const products = await productsCollection.find(filter).toArray();
       res.send(products);
     });
     app.post("/users", async (req, res) => {
@@ -86,9 +101,26 @@ async function run() {
       }
       res.status(403).send({ accessToken: "" });
     });
-    app.get("/bookings", async (req, res) => {
-      const bookings = await bookingsCollection.find({}).toArray();
+    app.get("/bookings", verifyJWT, async (req, res) => {
+      const query = req.query;
+      let filter = {};
+      if (query.id) filter = { _id: ObjectId(query.id) };
+      const bookings = await bookingsCollection.find(filter).toArray();
       res.send(bookings);
+    });
+    app.put("/bookings", verifyJWT, async (req, res) => {
+      const query = req.query;
+      const { id } = req.body;
+      const filter = { _id: ObjectId(id) };
+      let updatedDoc = {};
+      if (query.isPaid) updatedDoc = { $set: { isPaid: true } };
+      const options = { upsert: true };
+      const result = await bookingsCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
     });
     app.get("/my-orders", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded;
