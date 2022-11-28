@@ -15,6 +15,7 @@ function verifyJWT(req, res, next) {
   const token = authHeader.split(" ")[1];
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (error, decoded) {
     if (error) {
+      console.error(error);
       return res.status(403).send({ message: "Forbidden." });
     }
     req.decoded = decoded;
@@ -92,6 +93,20 @@ async function run() {
       const user = await usersCollection.findOne({ email: decodedEmail.email });
       res.send(user);
     });
+    app.post("/user", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded;
+      const query = req.body;
+      const user = await usersCollection.findOne({ email: decodedEmail.email });
+      if (query.isAdmin && decodedEmail.email === query.isAdmin) {
+        const isAdmin = user.role.includes("admin");
+        return res.send({ isAdmin });
+      }
+      if (query.isSeller && decodedEmail.email === query.isSeller) {
+        const isSeller = user.role.includes("seller");
+        return res.send({ isAdmin: isSeller });
+      }
+      return res.status(400).send({ message: "bad request" });
+    });
     app.put("/user", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded;
       const updatedInfo = req.body;
@@ -106,6 +121,7 @@ async function run() {
       res.send(result);
     });
     app.post("/jwt", async (req, res) => {
+      console.log();
       const email = req.body;
       const user = await usersCollection.findOne(email);
       if (user) {
@@ -170,6 +186,27 @@ async function run() {
       );
       res.send(result);
     });
+    app.delete(
+      "/products",
+      verifyJWT,
+      hasRoles(["admin"]),
+      async (req, res) => {
+        const { id } = req.body;
+        const query = { _id: ObjectId(id) };
+        const result = await productsCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
+    app.get(
+      "/reported-items",
+      verifyJWT,
+      hasRoles(["admin"]),
+      async (req, res) => {
+        const query = { isReported: true };
+        const reportedItems = await productsCollection.find(query).toArray();
+        res.send(reportedItems);
+      }
+    );
     app.get(
       "/my-products",
       verifyJWT,
