@@ -54,7 +54,6 @@ async function run() {
     }
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { id } = req.body;
-      console.log(id);
       const item = await bookingsCollection.findOne({ _id: ObjectId(id) });
       const amount = item.resalePrice * 100;
       const paymentIntent = await stripe.paymentIntents.create({
@@ -80,8 +79,11 @@ async function run() {
     });
     app.post("/users", async (req, res) => {
       const userInfo = req.body;
-      const userExist = await usersCollection.findOne(userInfo);
-      if (userExist) return res.send({ acknowledged: true });
+      const userExist = await usersCollection.findOne({
+        name: userInfo.name,
+        email: userInfo.email,
+      });
+      if (userExist.name) return res.send({ acknowledged: true });
       const result = await usersCollection.insertOne(userInfo);
       res.send(result);
     });
@@ -89,6 +91,19 @@ async function run() {
       const decodedEmail = req.decoded;
       const user = await usersCollection.findOne({ email: decodedEmail.email });
       res.send(user);
+    });
+    app.put("/user", verifyJWT, async (req, res) => {
+      const decodedEmail = req.decoded;
+      const updatedInfo = req.body;
+      const filter = { email: decodedEmail.email };
+      const updatedDoc = { $set: updatedInfo };
+      const option = { upsert: true };
+      const result = await usersCollection.updateOne(
+        filter,
+        updatedDoc,
+        option
+      );
+      res.send(result);
     });
     app.post("/jwt", async (req, res) => {
       const email = req.body;
@@ -206,6 +221,13 @@ async function run() {
         res.send(allSellers);
       }
     );
+    app.get("/all-buyers", verifyJWT, hasRoles(["admin"]), async (req, res) => {
+      const query = {
+        role: "buyer",
+      };
+      const allBuyers = await usersCollection.find(query).toArray();
+      res.send(allBuyers);
+    });
     app.delete("/users", verifyJWT, hasRoles(["admin"]), async (req, res) => {
       const { id } = req.body;
       const user = await usersCollection.deleteOne({ _id: ObjectId(id) });
@@ -216,8 +238,19 @@ async function run() {
       const { id } = req.body;
       const filter = { _id: ObjectId(id) };
       let updatedDoc = {};
-      if (query.verify) updatedDoc = { $set: { isVerified: true } };
       const options = { upsert: true };
+      if (query.verify) {
+        updatedDoc = { $set: { isVerified: true } };
+        const user = await usersCollection.findOne(filter);
+        const userProducts = await productsCollection.updateMany(
+          {
+            seller: user.name,
+          },
+          updatedDoc,
+          options
+        );
+      }
+
       const result = await usersCollection.updateOne(
         filter,
         updatedDoc,
