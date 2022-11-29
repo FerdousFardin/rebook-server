@@ -91,8 +91,8 @@ async function run() {
     });
     app.post("/user-authenticate", async (req, res) => {
       const { email, accountType } = req.body;
-      if (accountType === "admin") return res.send(true);
       const user = await usersCollection.findOne({ email });
+      if (user?.role?.includes("admin")) return res.send(true);
       if (user?.role?.includes(accountType)) return res.send(true);
       return res.send(false);
     });
