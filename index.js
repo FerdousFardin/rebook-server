@@ -84,18 +84,26 @@ async function run() {
         name: userInfo.name,
         email: userInfo.email,
       });
-      if (userExist.name) return res.send({ acknowledged: true });
+      if (userExist?.name || userExist?.email)
+        return res.send({ acknowledged: true });
       const result = await usersCollection.insertOne(userInfo);
       res.send(result);
+    });
+    app.post("/user-authenticate", async (req, res) => {
+      const { email, accountType } = req.body;
+      if (accountType === "admin") return res.send(true);
+      const user = await usersCollection.findOne({ email });
+      if (user?.role?.includes(accountType)) return res.send(true);
+      return res.send(false);
     });
     app.get("/user", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded;
       const user = await usersCollection.findOne({ email: decodedEmail.email });
       res.send(user);
     });
-    app.post("/user", verifyJWT, async (req, res) => {
+    app.get("/user-authorize", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded;
-      const query = req.body;
+      const query = req.query;
       const user = await usersCollection.findOne({ email: decodedEmail.email });
       if (query.isAdmin && decodedEmail.email === query.isAdmin) {
         const isAdmin = user.role.includes("admin");
@@ -103,7 +111,7 @@ async function run() {
       }
       if (query.isSeller && decodedEmail.email === query.isSeller) {
         const isSeller = user.role.includes("seller");
-        return res.send({ isAdmin: isSeller });
+        return res.send({ isSeller });
       }
       return res.status(400).send({ message: "bad request" });
     });
@@ -121,7 +129,6 @@ async function run() {
       res.send(result);
     });
     app.post("/jwt", async (req, res) => {
-      console.log();
       const email = req.body;
       const user = await usersCollection.findOne(email);
       if (user) {
@@ -141,17 +148,30 @@ async function run() {
     });
     app.put("/bookings", verifyJWT, async (req, res) => {
       const query = req.query;
-      const { id } = req.body;
-      const filter = { _id: ObjectId(id) };
+      const decodedEmail = req.decoded;
+      const { id, name, soldTo } = req.body;
+      const filter = { _id: ObjectId(id), customerEmail: decodedEmail.email };
       let updatedDoc = {};
-      if (query.isPaid) updatedDoc = { $set: { isPaid: true } };
       const options = { upsert: true };
+      let updateCollection = {};
+      if (query.isPaid) {
+        updatedDoc = { $set: { isPaid: true, soldTo } };
+        updateCollection = await productsCollection.updateOne(
+          {
+            name,
+          },
+          {
+            $set: { inStock: false, soldTo, customerEmail: decodedEmail.email },
+          },
+          options
+        );
+      }
       const result = await bookingsCollection.updateOne(
         filter,
         updatedDoc,
         options
       );
-      res.send(result);
+      res.send({ result1: result, result2: updateCollection });
     });
     app.get("/my-orders", verifyJWT, async (req, res) => {
       const decodedEmail = req.decoded;
@@ -207,6 +227,14 @@ async function run() {
         res.send(reportedItems);
       }
     );
+    app.get("/my-buyers", verifyJWT, hasRoles(["seller"]), async (req, res) => {
+      const { email } = req.decoded;
+      const seller = await usersCollection.findOne({ email });
+      const sellerCustomers = await productsCollection
+        .find({ seller: seller.name, inStock: false })
+        .toArray();
+      res.send(sellerCustomers);
+    });
     app.get(
       "/my-products",
       verifyJWT,
