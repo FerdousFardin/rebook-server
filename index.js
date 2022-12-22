@@ -78,6 +78,10 @@ async function run() {
       const products = await productsCollection.find(filter).toArray();
       res.send(products);
     });
+    app.get("/users", verifyJWT, hasRoles(["admin"]), async (req, res) => {
+      const result = await usersCollection.find({}).toArray();
+      res.send(result);
+    });
     app.post("/users", async (req, res) => {
       const userInfo = req.body;
       const userExist = await usersCollection.findOne({
