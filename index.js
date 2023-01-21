@@ -70,11 +70,12 @@ async function run() {
 
       res.send(categories);
     });
-    app.get("/products", verifyJWT, async (req, res) => {
+    app.get("/products", async (req, res) => {
       const query = req.query;
       let filter = {};
       if (query.categoryId) filter = { categoryId: query.categoryId };
       if (query.id) filter = { _id: ObjectId(query.id) };
+      if (query.find) filter = { $text: { $search: `${query.find}` } };
       const products = await productsCollection.find(filter).toArray();
       res.send(products);
     });
